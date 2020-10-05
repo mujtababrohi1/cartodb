@@ -48,14 +48,33 @@ class Organization < Sequel::Model
   DEFAULT_OBS_GENERAL_QUOTA = 0
   DEFAULT_MAPZEN_ROUTING_QUOTA = nil
 
-  delegate :get_api_calls, to: :carto_organization
+  delegate(
+    :default_password_expiration_in_d,
+    :get_api_calls,
+    :valid_builder_seats?,
+    :remaining_seats,
+    :assigned_seats,
+    :builder_users,
+    :valid_disk_quota?,
+    :unassigned_quota,
+    :assigned_quota,
+    :database_schema,
+    :last_billing_cycle,
+    :get_geocoding_calls,
+    :get_here_isolines_calls,
+    :get_mapzen_routing_calls,
+    :get_obs_snapshot_calls,
+    :get_obs_general_calls,
+    :twitter_imports_count,
+    to: :carto_organization
+  )
 
   def carto_organization
-    @carto_organization ||= Carto::Organization.find(id)
-  end
-
-  def default_password_expiration_in_d
-    Cartodb.get_config(:passwords, 'expiration_in_d')
+    if persisted?
+      Carto::Organization.find_by(id: id)
+    else
+      Carto::Organization.new(attributes)
+    end
   end
 
   def validate
@@ -105,25 +124,12 @@ class Organization < Sequel::Model
     end
   end
 
-  def valid_disk_quota?(quota = default_quota_in_bytes)
-    unassigned_quota >= quota
-  end
-
-  def valid_builder_seats?(users = [])
-    remaining_seats(excluded_users: users) > 0
-  end
-
   def before_validation
     self.geocoding_quota ||= DEFAULT_GEOCODING_QUOTA
     self.here_isolines_quota ||= DEFAULT_HERE_ISOLINES_QUOTA
     self.obs_snapshot_quota ||= DEFAULT_OBS_SNAPSHOT_QUOTA
     self.obs_general_quota ||= DEFAULT_OBS_GENERAL_QUOTA
     self.mapzen_routing_quota ||= DEFAULT_MAPZEN_ROUTING_QUOTA
-  end
-
-  # Just to make code more uniform with user.database_schema
-  def database_schema
-    self.name
   end
 
   def before_save
@@ -188,36 +194,6 @@ class Organization < Sequel::Model
     users.select { |u| owner && u.id != owner.id }
   end
 
-  def get_geocoding_calls(options = {})
-    require_organization_owner_presence!
-    date_from, date_to = quota_dates(options)
-    get_organization_geocoding_data(self, date_from, date_to)
-  end
-
-  def get_here_isolines_calls(options = {})
-    date_from, date_to = quota_dates(options)
-    get_organization_here_isolines_data(self, date_from, date_to)
-  end
-
-  def get_obs_snapshot_calls(options = {})
-    date_from, date_to = quota_dates(options)
-    get_organization_obs_snapshot_data(self, date_from, date_to)
-  end
-
-  def get_obs_general_calls(options = {})
-    date_from, date_to = quota_dates(options)
-    get_organization_obs_general_data(self, date_from, date_to)
-  end
-
-  def get_twitter_imports_count(options = {})
-    Carto::Organization.find(self.id).get_twitter_imports_count(options)
-  end
-
-  def get_mapzen_routing_calls(options = {})
-    date_from, date_to = quota_dates(options)
-    get_organization_mapzen_routing_data(self, date_from, date_to)
-  end
-
   def remaining_geocoding_quota
     remaining = geocoding_quota - get_geocoding_calls
     (remaining > 0 ? remaining : 0)
@@ -241,14 +217,6 @@ class Organization < Sequel::Model
   def remaining_mapzen_routing_quota
     remaining = mapzen_routing_quota.to_i - get_mapzen_routing_calls
     (remaining > 0 ? remaining : 0)
-  end
-
-  def assigned_quota
-    users_dataset.sum(:quota_in_bytes).to_i
-  end
-
-  def unassigned_quota
-    quota_in_bytes - assigned_quota
   end
 
   def to_poro
@@ -327,24 +295,12 @@ class Organization < Sequel::Model
     seats + viewer_seats
   end
 
-  def remaining_seats(excluded_users: [])
-    seats - assigned_seats(excluded_users: excluded_users)
-  end
-
   def remaining_viewer_seats(excluded_users: [])
     viewer_seats - assigned_viewer_seats(excluded_users: excluded_users)
   end
 
-  def assigned_seats(excluded_users: [])
-    builder_users.count { |u| !excluded_users.map(&:id).include?(u.id) }
-  end
-
   def assigned_viewer_seats(excluded_users: [])
     viewer_users.count { |u| !excluded_users.map(&:id).include?(u.id) }
-  end
-
-  def builder_users
-    (users || []).select(&:builder?)
   end
 
   def viewer_users
@@ -457,16 +413,6 @@ class Organization < Sequel::Model
   # Returns true if seat limit will be reached with new user
   def seat_limit_reached?
     (remaining_seats - 1) < 1
-  end
-
-  def quota_dates(options)
-    date_to = (options[:to] ? options[:to].to_date : Date.today)
-    date_from = (options[:from] ? options[:from].to_date : last_billing_cycle)
-    return date_from, date_to
-  end
-
-  def last_billing_cycle
-    owner ? owner.last_billing_cycle : Date.today
   end
 
   def period_end_date

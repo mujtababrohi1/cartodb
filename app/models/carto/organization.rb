@@ -59,10 +59,58 @@ module Carto
       end
     end
 
+    def default_password_expiration_in_d
+      Cartodb.get_config(:passwords, 'expiration_in_d')
+    end
+
+    def valid_builder_seats?(users = [])
+      remaining_seats(excluded_users: users).positive?
+    end
+
+    def remaining_seats(excluded_users: [])
+      seats - assigned_seats(excluded_users: excluded_users)
+    end
+
+    def assigned_seats(excluded_users: [])
+      builder_users.count { |u| !excluded_users.map(&:id).include?(u.id) }
+    end
+
+    def builder_users
+      (users || []).select(&:builder?)
+    end
+
+    def valid_disk_quota?(quota = default_quota_in_bytes)
+      unassigned_quota >= quota
+    end
+
+    def unassigned_quota
+      quota_in_bytes - assigned_quota
+    end
+
+    def assigned_quota
+      users_dataset.sum(:quota_in_bytes).to_i
+    end
+
+    # Make code more uniform with user.database_schema
+    def database_schema
+      name
+    end
+
+    ####
+
+    def quota_dates(options)
+      date_to = (options[:to] ? options[:to].to_date : Date.today)
+      date_from = (options[:from] ? options[:from].to_date : last_billing_cycle)
+      return date_from, date_to
+    end
+
+    def last_billing_cycle
+      owner ? owner.last_billing_cycle : Date.today
+    end
+
     def get_geocoding_calls(options = {})
       require_organization_owner_presence!
-      date_to = (options[:to] ? options[:to].to_date : Date.today)
-      date_from = (options[:from] ? options[:from].to_date : owner.last_billing_cycle)
+      date_from, date_to = quota_dates(options)
       get_organization_geocoding_data(self, date_from, date_to)
     end
 
@@ -72,29 +120,25 @@ module Carto
 
     def get_here_isolines_calls(options = {})
       require_organization_owner_presence!
-      date_to = (options[:to] ? options[:to].to_date : Date.today)
-      date_from = (options[:from] ? options[:from].to_date : owner.last_billing_cycle)
+      date_from, date_to = quota_dates(options)
       get_organization_here_isolines_data(self, date_from, date_to)
     end
 
     def get_mapzen_routing_calls(options = {})
       require_organization_owner_presence!
-      date_to = (options[:to] ? options[:to].to_date : Date.today)
-      date_from = (options[:from] ? options[:from].to_date : owner.last_billing_cycle)
+      date_from, date_to = quota_dates(options)
       get_organization_mapzen_routing_data(self, date_from, date_to)
     end
 
     def get_obs_snapshot_calls(options = {})
       require_organization_owner_presence!
-      date_to = (options[:to] ? options[:to].to_date : Date.today)
-      date_from = (options[:from] ? options[:from].to_date : owner.last_billing_cycle)
+      date_from, date_to = quota_dates(options)
       get_organization_obs_snapshot_data(self, date_from, date_to)
     end
 
     def get_obs_general_calls(options = {})
       require_organization_owner_presence!
-      date_to = (options[:to] ? options[:to].to_date : Date.today)
-      date_from = (options[:from] ? options[:from].to_date : owner.last_billing_cycle)
+      date_from, date_to = quota_dates(options)
       get_organization_obs_general_data(self, date_from, date_to)
     end
 
