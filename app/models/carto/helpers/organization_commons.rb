@@ -1,12 +1,22 @@
+module Carto
+  module OrganizationCommons
 
-module Carto::OrganizationCommons
-  class OrganizationWithoutOwner < StandardError
-    attr_reader :organization
+    class OrganizationWithoutOwner < StandardError
 
-    def initialize(organization)
-      @organization = organization
-      super "Organization has no owner"
+      attr_reader :organization
+
+      def initialize(organization)
+        @organization = organization
+        super 'Organization has no owner'
+      end
+
     end
+
+    # create the key that is used in redis
+    def key
+      "rails:orgs:#{name}"
+    end
+
   end
 end
 

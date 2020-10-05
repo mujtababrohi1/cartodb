@@ -198,6 +198,26 @@ module Carto::UserCommons
     viewer
   end
 
+  # A viewer can't destroy data, this allows the cleanup. Down to dataset level
+  # to skip model hooks.
+  def ensure_nonviewer
+    if is_a?(Carto::User)
+      update!(viewer: false)
+    elsif viewer
+      this.update(viewer: false)
+      self.viewer = false
+    end
+  end
+
+  def shared_entities
+    CartoDB::SharedEntity.join(:visualizations, id: :entity_id).where(user_id: id)
+  end
+
+  def has_shared_entities?
+    # Right now, cannot delete users with entities shared with other users or the org.
+    shared_entities.first.present?
+  end
+
   def builder_enabled?
     if has_organization? && builder_enabled.nil?
       organization.builder_enabled

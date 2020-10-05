@@ -352,24 +352,6 @@ class User < Sequel::Model
     Carto::UserMultifactorAuth.where(user_id: id)
   end
 
-  def shared_entities
-    CartoDB::SharedEntity.join(:visualizations, id: :entity_id).where(user_id: id)
-  end
-
-  def has_shared_entities?
-    # Right now, cannot delete users with entities shared with other users or the org.
-    shared_entities.first.present?
-  end
-
-  def ensure_nonviewer
-    # A viewer can't destroy data, this allows the cleanup. Down to dataset level
-    # to skip model hooks.
-    if viewer
-      this.update(viewer: false)
-      self.viewer = false
-    end
-  end
-
   def set_force_destroy
     @force_destroy = true
   end
