@@ -1315,7 +1315,11 @@ class User < Sequel::Model
   end
 
   def carto_user
-    @carto_user ||= Carto::User.find(id)
+    persisted? ? Carto::User.find_by(id: id) : Carto::User.new(attributes)
+  end
+
+  def sequel_user
+    self
   end
 
   def create_api_keys

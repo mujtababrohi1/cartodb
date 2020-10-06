@@ -228,16 +228,10 @@ describe Organization do
       organization.users.should_not include(builder)
 
       viewer2 = create_validated_user(organization: organization, viewer: true)
-      organization.reload
 
-      organization.remaining_seats.should eq 0
-      organization.remaining_viewer_seats.should eq 0
-      organization.users.should_not include(viewer2)
-
-      organization.seats = 0
-      organization.viewer_seats = 0
-      organization.valid?.should be_false
-      organization.errors.should include :seats, :viewer_seats
+      expect(viewer2).not_to be_valid
+      expect(viewer2.errors[:organization]).to include('not enough viewer seats')
+      expect(organization.reload.users).not_to include(viewer2)
 
       organization.destroy_cascade
     end

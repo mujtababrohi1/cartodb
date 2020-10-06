@@ -6,22 +6,26 @@ require_dependency 'carto/helpers/organization_commons'
 
 module Carto
   class Organization < ActiveRecord::Base
+
     include DataServicesMetricsHelper
     include AuthTokenGenerator
     include Carto::OrganizationSoftLimits
     include Carto::OrganizationCommons
 
-    serialize :auth_saml_configuration, CartoJsonSymbolizerSerializer
-    before_validation :ensure_auth_saml_configuration
-    validates :auth_saml_configuration, carto_json_symbolizer: true
+    belongs_to :owner, class_name: Carto::User, inverse_of: :owned_organization
 
     has_many :users, -> { order(:username) }, inverse_of: :organization
-    belongs_to :owner, class_name: Carto::User, inverse_of: :owned_organization
     has_many :groups, -> { order(:display_name) }, inverse_of: :organization
     has_many :assets, class_name: Carto::Asset, dependent: :destroy, inverse_of: :organization
     has_many :notifications, -> { order('created_at DESC') }, dependent: :destroy
     has_many :connector_configurations, inverse_of: :organization, dependent: :destroy
     has_many :oauth_app_organizations, inverse_of: :oauth_app, dependent: :destroy
+
+    validates :auth_saml_configuration, carto_json_symbolizer: true
+
+    serialize :auth_saml_configuration, CartoJsonSymbolizerSerializer
+
+    before_validation :ensure_auth_saml_configuration
 
     before_destroy :destroy_groups_with_extension
 

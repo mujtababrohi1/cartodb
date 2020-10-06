@@ -75,6 +75,7 @@ class Organization < Sequel::Model
     :max_layers,
     :auth_saml_enabled?,
     :inheritable_feature_flags,
+    :get_twitter_imports_count,
     to: :carto_organization
   )
 
@@ -185,7 +186,7 @@ class Organization < Sequel::Model
     destroy_groups
     destroy_non_owner_users
     if owner
-      owner.destroy_cascade
+      owner.sequel_user.destroy_cascade
     else
       destroy
     end
@@ -195,7 +196,7 @@ class Organization < Sequel::Model
     non_owner_users.each do |user|
       user.ensure_nonviewer
       user.shared_entities.map(&:entity).uniq.each(&:delete)
-      user.destroy_cascade
+      user.sequel_user.destroy_cascade
     end
   end
 
