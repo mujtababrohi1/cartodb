@@ -82,15 +82,13 @@ class Organization < Sequel::Model
     :seat_limit_reached?,
     :public_vis_count_by_type,
     :name_exists_in_users?,
+    :require_organization_owner_presence!,
+    :destroy_non_owner_users,
     to: :carto_organization
   )
 
   def carto_organization
-    if persisted?
-      Carto::Organization.find_by(id: id)
-    else
-      Carto::Organization.new(attributes)
-    end
+    persisted? ? Carto::Organization.find_by(id: id) : Carto::Organization.new(attributes)
   end
 
   def validate
@@ -191,25 +189,7 @@ class Organization < Sequel::Model
 
     destroy_groups
     destroy_non_owner_users
-    if owner
-      owner.sequel_user.destroy_cascade
-    else
-      destroy
-    end
-  end
-
-  def destroy_non_owner_users
-    non_owner_users.each do |user|
-      user.ensure_nonviewer
-      user.shared_entities.map(&:entity).uniq.each(&:delete)
-      user.sequel_user.destroy_cascade
-    end
-  end
-
-  def require_organization_owner_presence!
-    if owner.nil?
-      raise Carto::Organization::OrganizationWithoutOwner.new(self)
-    end
+    owner ? owner.sequel_user.destroy_cascade : destroy
   end
 
 end

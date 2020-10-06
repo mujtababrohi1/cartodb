@@ -351,7 +351,19 @@ module Carto
       users.map { |u| u.get_api_calls(options).sum }.sum
     end
 
+    def require_organization_owner_presence!
+      raise Carto::Organization::OrganizationWithoutOwner.new(self) unless owner
+    end
+
     ## TODO: make private once model is fully migrated
+
+    def destroy_non_owner_users
+      non_owner_users.each do |user|
+        user.ensure_nonviewer
+        user.shared_entities.map(&:entity).uniq.each(&:delete)
+        user.sequel_user.destroy_cascade
+      end
+    end
 
     def destroy_assets
       assets.map { |asset| Carto::Asset.find(asset.id) }.map(&:destroy).all?

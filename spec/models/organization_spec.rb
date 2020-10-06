@@ -105,7 +105,7 @@ describe Organization do
       user2.viewer = true
       user2.save
 
-      organization.destroy_cascade
+      organization.reload.destroy_cascade
 
       Organization.where(id: organization.id).first.should be nil
       ::User.where(id: user1.id).first.should be nil
