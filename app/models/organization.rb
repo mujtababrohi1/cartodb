@@ -76,13 +76,10 @@ class Organization < Sequel::Model
     :auth_saml_enabled?,
     :inheritable_feature_flags,
     :get_twitter_imports_count,
-    :save_metadata,
-    :destroy_metadata,
     :destroy_assets,
     :destroy_groups,
     :disk_quota_limit_reached?,
     :seat_limit_reached?,
-    :period_end_date,
     :public_vis_count_by_type,
     :name_exists_in_users?,
     to: :carto_organization
