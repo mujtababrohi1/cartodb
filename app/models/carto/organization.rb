@@ -63,6 +63,28 @@ module Carto
       end
     end
 
+    # save orgs basic metadata to redis for other services (node sql api, geocoder api, etc)
+    # to use
+    def save_metadata
+      $users_metadata.HMSET key,
+        'id', id,
+        'geocoding_quota', geocoding_quota,
+        'here_isolines_quota', here_isolines_quota,
+        'obs_snapshot_quota', obs_snapshot_quota,
+        'obs_general_quota', obs_general_quota,
+        'mapzen_routing_quota', mapzen_routing_quota,
+        'google_maps_client_id', google_maps_key,
+        'google_maps_api_key', google_maps_private_key,
+        'period_end_date', period_end_date,
+        'geocoder_provider', geocoder_provider,
+        'isolines_provider', isolines_provider,
+        'routing_provider', routing_provider
+    end
+
+    def destroy_metadata
+      $users_metadata.DEL key
+    end
+
     delegate :destroy_cascade, to: :sequel_organization
     def sequel_organization
       ::Organization[id]
@@ -84,20 +106,8 @@ module Carto
       builder_users.count { |u| !excluded_users.map(&:id).include?(u.id) }
     end
 
-    def builder_users
-      (users || []).select(&:builder?)
-    end
-
     def valid_disk_quota?(quota = default_quota_in_bytes)
       unassigned_quota >= quota
-    end
-
-    def unassigned_quota
-      quota_in_bytes - assigned_quota
-    end
-
-    def assigned_quota
-      users_dataset.sum(:quota_in_bytes).to_i
     end
 
     # Make code more uniform with user.database_schema
@@ -313,11 +323,11 @@ module Carto
     end
 
     def assigned_quota
-      self.users.sum(:quota_in_bytes).to_i
+      users.sum(:quota_in_bytes).to_i
     end
 
     def unassigned_quota
-      self.quota_in_bytes - assigned_quota
+      quota_in_bytes - assigned_quota
     end
 
     def require_organization_owner_presence!
@@ -367,18 +377,56 @@ module Carto
       users.map { |u| u.get_api_calls(options).sum }.sum
     end
 
+    ## TODO: make private once model is fully migrated
+
+    def destroy_assets
+      assets.map { |asset| Carto::Asset.find(asset.id) }.map(&:destroy).all?
+    end
+
+    def destroy_groups
+      return unless groups
+
+      groups.map { |g| Carto::Group.find(g.id).destroy_group_with_extension }
+
+      reload
+    end
+
+    # Returns true if disk quota won't allow new signups with existing defaults
+    def disk_quota_limit_reached?
+      unassigned_quota < default_quota_in_bytes
+    end
+
+    # Returns true if seat limit will be reached with new user
+    def seat_limit_reached?
+      (remaining_seats - 1) < 1
+    end
+
+    def public_vis_count_by_type(type)
+      CartoDB::Visualization::Collection.new.fetch(
+        user_id: users.map(&:id),
+        type: type,
+        privacy: CartoDB::Visualization::Member::PRIVACY_PUBLIC,
+        per_page: CartoDB::Visualization::Collection::ALL_RECORDS
+      ).count
+    end
+
+    def name_exists_in_users?
+      !::User.where(username: name).first.nil?
+    end
+
     private
 
     def ensure_auth_saml_configuration
-      self.auth_saml_configuration ||= Hash.new
+      self.auth_saml_configuration ||= {}
     end
 
     def destroy_groups_with_extension
       return unless groups
 
-      groups.map { |g| g.destroy_group_with_extension }
+      groups.each(&:destroy_group_with_extension)
 
       reload
     end
+
   end
 end

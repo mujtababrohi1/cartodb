@@ -76,6 +76,15 @@ class Organization < Sequel::Model
     :auth_saml_enabled?,
     :inheritable_feature_flags,
     :get_twitter_imports_count,
+    :save_metadata,
+    :destroy_metadata,
+    :destroy_assets,
+    :destroy_groups,
+    :disk_quota_limit_reached?,
+    :seat_limit_reached?,
+    :period_end_date,
+    :public_vis_count_by_type,
+    :name_exists_in_users?,
     to: :carto_organization
   )
 
@@ -200,72 +209,10 @@ class Organization < Sequel::Model
     end
   end
 
-  # save orgs basic metadata to redis for other services (node sql api, geocoder api, etc)
-  # to use
-  def save_metadata
-    $users_metadata.HMSET key,
-      'id', id,
-      'geocoding_quota', geocoding_quota,
-      'here_isolines_quota', here_isolines_quota,
-      'obs_snapshot_quota', obs_snapshot_quota,
-      'obs_general_quota', obs_general_quota,
-      'mapzen_routing_quota', mapzen_routing_quota,
-      'google_maps_client_id', google_maps_key,
-      'google_maps_api_key', google_maps_private_key,
-      'period_end_date', period_end_date,
-      'geocoder_provider', geocoder_provider,
-      'isolines_provider', isolines_provider,
-      'routing_provider', routing_provider
-  end
-
-  def destroy_metadata
-    $users_metadata.DEL key
-  end
-
   def require_organization_owner_presence!
     if owner.nil?
       raise Carto::Organization::OrganizationWithoutOwner.new(self)
     end
   end
 
-  private
-
-  def destroy_assets
-    assets.map { |asset| Carto::Asset.find(asset.id) }.map(&:destroy).all?
-  end
-
-  def destroy_groups
-    return unless groups
-
-    groups.map { |g| Carto::Group.find(g.id).destroy_group_with_extension }
-
-    reload
-  end
-
-  # Returns true if disk quota won't allow new signups with existing defaults
-  def disk_quota_limit_reached?
-    unassigned_quota < default_quota_in_bytes
-  end
-
-  # Returns true if seat limit will be reached with new user
-  def seat_limit_reached?
-    (remaining_seats - 1) < 1
-  end
-
-  def period_end_date
-    owner ? owner.period_end_date : nil
-  end
-
-  def public_vis_count_by_type(type)
-    CartoDB::Visualization::Collection.new.fetch(
-        user_id:  self.users.map(&:id),
-        type:     type,
-        privacy:  CartoDB::Visualization::Member::PRIVACY_PUBLIC,
-        per_page: CartoDB::Visualization::Collection::ALL_RECORDS
-    ).count
-  end
-
-  def name_exists_in_users?
-    !::User.where(username: self.name).first.nil?
-  end
 end
