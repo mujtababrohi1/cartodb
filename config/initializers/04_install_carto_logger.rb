@@ -17,22 +17,8 @@ module Carto
   module Common
     class ActionMailerLogSubscriber < ActionMailer::LogSubscriber
 
-      def deliver(event)
-        payload = event.payload
-
-        info(
-          message: 'Mail sent',
-          mailer_class: payload[:mailer],
-          message_id: payload[:message_id],
-          current_user: current_user(payload),
-          email_subject: payload[:subject],
-          email_to_hint: email_to_hint(payload),
-          email_from: payload[:from],
-          email_date: payload[:date],
-          email_body_hint: email_body_hint(payload)
-        )
-      end
-
+      # Marks Rails received a request to send an email
+      # The original payload of this event contains very little information
       def process(event)
         payload = event.payload
 
@@ -44,6 +30,23 @@ module Carto
         )
       end
 
+      # Marks Rails tried to send the email. Does not imply user received it, as an error can still happen
+      # while sending it.
+      def deliver(event)
+        payload = event.payload
+
+        info(
+          message: 'Mail sent',
+          mailer_class: payload[:mailer],
+          message_id: payload[:message_id],
+          current_user: current_user(payload),
+          email_subject: payload[:subject],
+          email_to_hint: email_to_hint(payload),
+          email_from: payload[:from],
+          email_date: payload[:date]
+        )
+      end
+
       private
 
       def current_user(event_payload)
@@ -51,17 +54,23 @@ module Carto
         user_klass.find_by(email: event_payload[:to])&.username
       end
 
-      def email_to(event_payload)
-        receiver_address = event_payload[:to]
-        return unless receiver_address.present? && receiver_address.include?('@') && receiver_address.length > 5
+      def email_to_hint(event_payload)
+        email_to = event_payload[:to]
 
-        receiver_address.split('@').map do |segment|
-          segment[0] + '*' * (segment.length - 2) + segment[-1]
-        end.join('@')
+        if email_to.is_a?(Array)
+          email_to.map { |address| email_address_hint(address) }
+        else
+          [email_address_hint(email_to)]
+        end
       end
 
-      def email_body_hint(event_payload)
-        event_payload[:mail].first(30) if event_payload[:mail].present?
+      def email_address_hint(address)
+        return unless address.present?
+        return '[ADDRESS]' unless address.include?('@') && address.length > 5
+
+        address.split('@').map do |segment|
+          segment[0] + '*' * (segment.length - 2) + segment[-1]
+        end.join('@')
       end
 
     end
